@@ -1,0 +1,30 @@
+{
+  "name": "workpay-ai",
+  "version": "1.0.0",
+  "description": "WorkPay AI - AI-Powered Worker Hiring, Financial Management & Digital Payment Platform",
+  "private": true,
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "dev": "concurrently -n \"API,WEB\" -c \"cyan,magenta\" \"npm run server\" \"npm run client\"",
+    "dev:all": "concurrently -n \"API,WEB,ML\" -c \"cyan,magenta,yellow\" \"npm run server\" \"npm run client\" \"npm run ml\"",
+    "server": "npm --prefix backend start",
+    "client": "npm --prefix frontend run dev",
+    "ml": "python ml_service/app.py",
+    "ml:train": "python ml_service/train_models.py",
+    "ml:test": "python ml_service/test_ml_service.py",
+    "db:init": "npm --prefix backend run db:init",
+    "build": "npm --prefix frontend run build"
+  },
+  "keywords": [
+    "workpay",
+    "ai",
+    "fintech",
+    "mysql",
+    "gig-economy"
+  ],
+  "author": "WorkPay AI Engineering Team",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.2.5"
+  }
+}

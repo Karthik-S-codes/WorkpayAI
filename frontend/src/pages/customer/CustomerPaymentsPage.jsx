@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   CreditCard, ShieldCheck, Download, CheckCircle2, Clock,
-  ArrowRight, FileText, Lock, AlertCircle
+  ArrowRight, FileText, Lock, AlertCircle, QrCode
 } from 'lucide-react';
 import { paymentAPI, assignmentAPI } from '../../services/api';
+import PaymentGatewayModal from '../../components/PaymentGatewayModal';
 
 export default function CustomerPaymentsPage() {
   const [assignments, setAssignments] = useState([]);
@@ -12,87 +13,39 @@ export default function CustomerPaymentsPage() {
 
   // Payment Checkout Modal State
   const [selectedPayTarget, setSelectedPayTarget] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState('UPI - Google Pay');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentSuccessData, setPaymentSuccessData] = useState(null);
-  const [paymentError, setPaymentError] = useState('');
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [assignRes, historyRes] = await Promise.all([
+        assignmentAPI.list(),
+        paymentAPI.getHistory()
+      ]);
+
+      if (assignRes.data?.success) setAssignments(assignRes.data.assignments);
+      if (historyRes.data?.success) setHistory(historyRes.data.transactions);
+    } catch (err) {
+      console.error('Failed to load payment portal', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function loadData() {
-      setIsLoading(true);
-      try {
-        const [assignRes, historyRes] = await Promise.all([
-          assignmentAPI.list(),
-          paymentAPI.getHistory()
-        ]);
-
-        if (assignRes.data?.success) setAssignments(assignRes.data.assignments);
-        if (historyRes.data?.success) setHistory(historyRes.data.transactions);
-      } catch (err) {
-        console.error('Failed to load payment portal', err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
     loadData();
   }, []);
 
-  const handleInitiatePayment = (assignment) => {
-    setSelectedPayTarget(assignment);
-    setPaymentSuccessData(null);
-    setPaymentError('');
-  };
-
-  const handleExecutePayment = async (e) => {
-    e?.preventDefault();
-    if (!selectedPayTarget) return;
-
-    setIsProcessing(true);
-    setPaymentError('');
-
-    try {
-      // 1. Backend creates order
-      const orderRes = await paymentAPI.createOrder({
-        jobId: selectedPayTarget.job_id,
-        workerId: selectedPayTarget.worker_id,
-        amount: selectedPayTarget.agreed_rate,
-        paymentMethod
-      });
-
-      if (!orderRes.data?.success) {
-        throw new Error('Order creation failed.');
-      }
-
-      const orderData = orderRes.data.order;
-
-      // 2. Cryptographic signature simulation in sandbox dev mode:
-      // Generates verifiable test payment signature
-      const simPaymentId = `pay_sim_${Date.now().toString(36)}`;
-      const simSignature = `sim_sig_${Math.random().toString(36).substring(2, 15)}`;
-
-      // 3. Backend verification & ledger entry
-      const verifyRes = await paymentAPI.verify({
-        jobId: selectedPayTarget.job_id,
-        workerId: selectedPayTarget.worker_id,
-        amount: selectedPayTarget.agreed_rate,
-        orderId: orderData.orderId,
-        paymentId: simPaymentId,
-        signature: simSignature,
-        paymentMethod,
-        idempotencyKey: `idemp_${orderData.orderId}_${simPaymentId}`
-      });
-
-      if (verifyRes.data?.success) {
-        setPaymentSuccessData(verifyRes.data.result);
-        // Refresh history
-        const refreshed = await paymentAPI.getHistory();
-        if (refreshed.data?.success) setHistory(refreshed.data.transactions);
-      }
-    } catch (err) {
-      setPaymentError(err.response?.data?.message || err.message || 'Payment processing failed.');
-    } finally {
-      setIsProcessing(false);
-    }
+  const handleInitiatePayment = (a) => {
+    setSelectedPayTarget({
+      jobId: a.job_id,
+      workerId: a.worker_id,
+      workerName: a.worker_name,
+      workerAvatar: a.worker_avatar,
+      categoryName: a.category_name,
+      jobTitle: a.job_title || 'Trade Service Assignment',
+      amount: a.agreed_rate,
+      paymentType: a.payment_type
+    });
   };
 
   return (
@@ -100,7 +53,7 @@ export default function CustomerPaymentsPage() {
       <div>
         <h1 className="text-2xl font-black text-slate-900">Secure Digital Payment Hub</h1>
         <p className="text-xs text-slate-500 mt-1">
-          Internal double-entry digital escrow with cryptographic signature verification
+          Internal double-entry digital escrow with dynamic UPI QR Code, NPCI & cryptographic HMAC SHA-256 verification
         </p>
       </div>
 
@@ -149,10 +102,10 @@ export default function CustomerPaymentsPage() {
 
                           <button
                             onClick={() => handleInitiatePayment(a)}
-                            className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center space-x-1.5 transition-all"
+                            className="py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center space-x-1.5 transition-all transform active:scale-98"
                           >
-                            <Lock className="w-3.5 h-3.5" />
-                            <span>Release Payment</span>
+                            <QrCode className="w-3.5 h-3.5" />
+                            <span>Scan & Pay (UPI)</span>
                           </button>
                         </div>
                       </div>
@@ -195,7 +148,7 @@ export default function CustomerPaymentsPage() {
                             href={paymentAPI.downloadInvoiceUrl(tx.invoice_number)}
                             target="_blank"
                             rel="noreferrer"
-                            className="p-2.5 bg-slate-100 hover:bg-electric-50 hover:text-electric-600 text-slate-600 rounded-xl transition-colors flex items-center space-x-1 text-xs font-semibold"
+                            className="p-2.5 bg-slate-100 hover:bg-electric-50 hover:text-electric-600 text-slate-600 rounded-xl transition-colors flex items-center space-x-1 text-xs font-semibold border border-slate-200"
                             title="Download Tax PDF Invoice"
                           >
                             <Download className="w-4 h-4" />
@@ -238,6 +191,10 @@ export default function CustomerPaymentsPage() {
                 </div>
                 <div className="flex items-center space-x-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Dynamic QR Code with UPI Deep-linking</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>Direct Mediation for Unresolved Disputes</span>
                 </div>
               </div>
@@ -246,108 +203,15 @@ export default function CustomerPaymentsPage() {
         </div>
       )}
 
-      {/* Payment Processing Modal */}
-      {selectedPayTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 p-6 space-y-5">
-            <h3 className="font-bold text-lg text-slate-900">Digital Escrow Checkout</h3>
-
-            {paymentSuccessData ? (
-              <div className="space-y-4 text-center py-4">
-                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-xl">
-                  ✓
-                </div>
-                <h4 className="font-bold text-base text-slate-900">Payment Verified & Settled!</h4>
-                <p className="text-xs text-slate-600">
-                  ₹{paymentSuccessData.amount} has been credited to {selectedPayTarget.worker_name}'s digital wallet.
-                </p>
-                <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-500 space-y-1">
-                  <div>Invoice Number: <strong>{paymentSuccessData.invoiceNumber}</strong></div>
-                  <div>Transaction Ref: <strong>{paymentSuccessData.transactionReference}</strong></div>
-                </div>
-
-                <div className="flex items-center space-x-3 pt-3">
-                  <a
-                    href={paymentAPI.downloadInvoiceUrl(paymentSuccessData.invoiceNumber)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex-1 py-2.5 bg-electric-600 hover:bg-electric-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-1.5"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Download Invoice PDF</span>
-                  </a>
-                  <button
-                    onClick={() => setSelectedPayTarget(null)}
-                    className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleExecutePayment} className="space-y-4">
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Project:</span>
-                    <span className="font-bold text-slate-800">{selectedPayTarget.job_title || 'Trade Service'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Worker:</span>
-                    <span className="font-bold text-slate-800">{selectedPayTarget.worker_name}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-slate-200">
-                    <span className="text-slate-700 font-bold">Total Amount to Pay:</span>
-                    <span className="text-base font-black text-electric-600">₹{selectedPayTarget.agreed_rate}</span>
-                  </div>
-                </div>
-
-                {paymentError && (
-                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold">
-                    {paymentError}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Payment Method</label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
-                  >
-                    <option value="UPI - Google Pay">UPI - Google Pay</option>
-                    <option value="UPI - PhonePe">UPI - PhonePe</option>
-                    <option value="UPI - Paytm">UPI - Paytm</option>
-                    <option value="Netbanking - HDFC / ICICI">Netbanking - HDFC / ICICI</option>
-                    <option value="Debit Card / Visa / RuPay">Debit Card / Visa / RuPay</option>
-                  </select>
-                </div>
-
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-800 text-[11px] leading-relaxed">
-                  <strong>Sandbox Mode Active:</strong> Payment execution triggers genuine cryptographic HMAC SHA-256 verification and logs atomic records to the MySQL wallet ledger.
-                </div>
-
-                <div className="flex items-center space-x-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPayTarget(null)}
-                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isProcessing}
-                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20"
-                  >
-                    {isProcessing ? 'Verifying Signature...' : `Pay ₹${selectedPayTarget.agreed_rate} Now`}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Real FinTech Multi-Rail Payment Gateway Modal */}
+      <PaymentGatewayModal
+        isOpen={Boolean(selectedPayTarget)}
+        onClose={() => setSelectedPayTarget(null)}
+        target={selectedPayTarget}
+        onPaymentSuccess={() => {
+          loadData();
+        }}
+      />
     </div>
   );
 }
-

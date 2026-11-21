@@ -53,11 +53,27 @@ async function getHiringRequests(req, res, next) {
 
     if (role === 'customer') {
       sql = `
-        SELECT hr.*, wp.expected_salary, wp.experience_years, wp.rating_avg, u.full_name as worker_name, u.avatar_url as worker_avatar, u.phone as worker_phone, wc.name as category_name
+        SELECT hr.*, 
+               j.title as job_title,
+               j.status as job_status,
+               ja.status as assignment_status,
+               (SELECT inv.invoice_number 
+                FROM invoices inv 
+                JOIN transactions t ON inv.transaction_id = t.id 
+                WHERE t.job_id = hr.job_id AND t.status = 'completed' 
+                ORDER BY t.id DESC LIMIT 1) as invoice_number,
+               (SELECT COUNT(*) 
+                FROM transactions t 
+                WHERE t.job_id = hr.job_id AND t.status = 'completed') as paid_count,
+               wp.expected_salary, wp.experience_years, wp.rating_avg, 
+               u.full_name as worker_name, u.avatar_url as worker_avatar, u.phone as worker_phone, 
+               wc.name as category_name
         FROM hiring_requests hr
         JOIN worker_profiles wp ON hr.worker_id = wp.id
         JOIN users u ON wp.user_id = u.id
         LEFT JOIN worker_categories wc ON wp.category_id = wc.id
+        LEFT JOIN jobs j ON hr.job_id = j.id
+        LEFT JOIN job_assignments ja ON hr.job_id = ja.job_id
         WHERE hr.customer_id = ?
         ORDER BY hr.created_at DESC
       `;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Clock, CheckCircle2, XCircle, CreditCard, ArrowRight, Download, FileText, QrCode, Zap } from 'lucide-react';
+import { Users, Clock, CheckCircle2, XCircle, CreditCard, ArrowRight, Download, FileText, QrCode } from 'lucide-react';
 import { hiringAPI, paymentAPI } from '../../services/api';
 import PaymentGatewayModal from '../../components/PaymentGatewayModal';
 
@@ -40,9 +40,9 @@ export default function HiringRequestsPage() {
   };
 
   const getStatusBadge = (status, isPaid) => {
-    if (isPaid) {
+    if (isPaid || status === 'paid') {
       return (
-        <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold flex items-center space-x-1 border border-emerald-300">
+        <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold flex items-center space-x-1.5 border border-emerald-300 shadow-sm">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
           <span>Paid & Settled</span>
         </span>
@@ -109,7 +109,7 @@ export default function HiringRequestsPage() {
         <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
           <div className="divide-y divide-slate-100">
             {requests.map((req) => {
-              const isPaid = (req.paid_count > 0) || (req.job_status === 'completed') || (req.assignment_status === 'fully_completed');
+              const isPaid = (req.status === 'paid') || (req.paid_count > 0) || (req.job_status === 'completed') || (req.assignment_status === 'fully_completed');
 
               return (
                 <div key={req.id} className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
@@ -142,44 +142,37 @@ export default function HiringRequestsPage() {
 
                     <div>{getStatusBadge(req.status, isPaid)}</div>
 
-                    {/* ACTIONS */}
-                    {req.status === 'accepted' && (
+                    {/* ACTIONS: Once paid, NEVER show Proceed to Pay again! */}
+                    {isPaid ? (
                       <div className="flex items-center space-x-2">
-                        {isPaid ? (
-                          <>
-                            {req.invoice_number && (
-                              <a
-                                href={paymentAPI.downloadInvoiceUrl(req.invoice_number)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="py-2 px-3 bg-slate-100 hover:bg-electric-50 hover:text-electric-600 text-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors border border-slate-200"
-                                title="Download Official Tax Invoice PDF"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>Tax Invoice</span>
-                              </a>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenPayment(req)}
-                              className="py-2 px-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-sm transition-all"
-                            >
-                              <QrCode className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>Scan & Pay Again</span>
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenPayment(req)}
-                            className="py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center space-x-2 transition-all transform active:scale-98"
+                        {req.invoice_number ? (
+                          <a
+                            href={paymentAPI.downloadInvoiceUrl(req.invoice_number)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all border border-emerald-200 shadow-sm"
+                            title="Download Official Tax Invoice PDF"
                           >
-                            <QrCode className="w-4 h-4" />
-                            <span>Proceed to Pay (Scan QR)</span>
-                          </button>
+                            <Download className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Download Tax Invoice (PDF)</span>
+                          </a>
+                        ) : (
+                          <span className="text-xs text-emerald-600 font-bold flex items-center space-x-1.5 py-2 px-3 bg-emerald-50 rounded-xl border border-emerald-200">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Payment Completed</span>
+                          </span>
                         )}
                       </div>
-                    )}
+                    ) : req.status === 'accepted' ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenPayment(req)}
+                        className="py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center space-x-2 transition-all transform active:scale-98"
+                      >
+                        <QrCode className="w-4 h-4" />
+                        <span>Proceed to Pay (Scan QR)</span>
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               );

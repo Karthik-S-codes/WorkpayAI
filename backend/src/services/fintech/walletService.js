@@ -147,6 +147,10 @@ async function processJobPayment({
         "UPDATE worker_profiles SET total_completed_jobs = total_completed_jobs + 1 WHERE id = ?",
         [workerId]
       );
+      await conn.execute(
+        "UPDATE hiring_requests SET status = 'paid', updated_at = NOW() WHERE job_id = ?",
+        [jobId]
+      );
     }
 
     return {
